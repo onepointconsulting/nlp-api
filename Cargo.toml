@@ -1,0 +1,15 @@
+[package]
+name = "nlp-api"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-cors = "0.6.4"
+actix-web = "4.3.1"
+chrono = "0.4.24"
+config = "0.13.3"
+dotenv = "0.15.0"
+rust-bert = "0.20.0"
+serde = { version = "1.0.160", features = ["derive"] }

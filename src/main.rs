@@ -9,7 +9,10 @@ use chrono::{Datelike, Timelike, Utc};
 use rust_bert::pipelines::sequence_classification::Label;
 use crate::config::MainConfig;
 use serde::{Serialize, Deserialize};
-use crate::nlp::{SupportedLanguage, translate_input, zero_shot_classification};
+use crate::nlp::{keyword_extraction, SupportedLanguage, translate_input, zero_shot_classification};
+
+const STATUS_OK: &'static str = "OK";
+const STATUS_FAILED: &'static str = "Failed";
 
 mod config {
     use serde::Deserialize;
@@ -33,6 +36,12 @@ struct ZeroShotRequest {
     split: bool
 }
 
+#[derive(Deserialize)]
+struct KeywordExtractionRequest {
+    orig_text: String,
+    split: bool
+}
+
 #[derive(Serialize)]
 struct ZeroShotResponse {
     sentences: Vec<String>,
@@ -50,6 +59,22 @@ struct TranslationResponse {
 struct Info {
     message: String,
     timestamp: String,
+}
+
+
+#[derive(Serialize)]
+struct ExtractionResponse {
+    results: Vec<Vec<ExtractionKeyword>>,
+    status: String
+}
+
+
+#[derive(Serialize)]
+struct ExtractionKeyword {
+    /// Keyword
+    pub text: String,
+    /// Similarity score for the keyword
+    pub score: f32,
 }
 
 #[post("/translate")]
@@ -84,7 +109,7 @@ async fn translate(info: web::Json<TranslationRequest>) -> impl Responder {
 }
 
 #[post("/zero_shot")]
-async fn zero_shot_classification_handler(request: web::Json<ZeroShotRequest>) -> impl Responder {
+async fn zero_shot_classification_service(request: web::Json<ZeroShotRequest>) -> impl Responder {
     let res = zero_shot_classification(request.orig_text.clone(), request.split);
     match res.await {
         Ok(vecs) => {
@@ -92,14 +117,37 @@ async fn zero_shot_classification_handler(request: web::Json<ZeroShotRequest>) -
             HttpResponse::Ok().json(ZeroShotResponse {
                 sentences,
                 responses,
-                status: String::from("OK")
+                status: String::from(STATUS_OK)
             })
         }
         Err(e) => {
-            HttpResponse::Ok().json(ZeroShotResponse {
+            HttpResponse::InternalServerError().json(ZeroShotResponse {
                 sentences: vec!(request.orig_text.clone()),
                 responses: vec!(),
-                status: String::from("Failed")
+                status: String::from(STATUS_FAILED)
+            })
+        }
+    }
+}
+
+#[post("/keyword_extraction")]
+async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>) -> impl Responder {
+    let res = keyword_extraction(request.orig_text.clone(), request.split);
+    match res.await {
+        Ok(vec) => {
+            let keyword_res = vec.iter()
+                .map(|child| child.iter()
+                    .map(|k| ExtractionKeyword { text: k.text.clone(), score: k.score}).collect()).collect();
+            let extraction_keyword = ExtractionResponse{
+                results: keyword_res,
+                status: String::from(STATUS_OK)
+            };
+            HttpResponse::Ok().json(extraction_keyword)
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(ExtractionResponse {
+                results: vec![],
+                status: String::from(STATUS_FAILED)
             })
         }
     }
@@ -141,7 +189,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(config.clone()))
             .service(index)
             .service(translate)
-            .service(zero_shot_classification_handler)
+            .service(zero_shot_classification_service)
+            .service(keyword_extraction_service)
     })
         .bind(server_addr)?
         .run()

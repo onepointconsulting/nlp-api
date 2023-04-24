@@ -2,6 +2,7 @@ use std::str::FromStr;
 use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
 use rust_bert::RustBertError;
 use std::thread;
+use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionModel};
 use rust_bert::pipelines::sequence_classification::Label;
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
 
@@ -77,11 +78,7 @@ fn split_text(input: String) -> Vec<String> {
 pub async fn zero_shot_classification(input: String, split: bool) -> Result<(Vec<String>, Vec<Vec<Label>>), RustBertError>{
 
     return thread::spawn(move || {
-        let vec = if split {
-            split_text(input.clone())
-        } else {
-            vec!(input.clone())
-        };
+        let vec = handleSplit(input, split);
         let splits: Vec<&str> = vec.iter().map(|s| s.as_str()).collect();
 
         let sequence_classification_model = ZeroShotClassificationModel::new(Default::default())?;
@@ -105,6 +102,22 @@ pub async fn zero_shot_classification(input: String, split: bool) -> Result<(Vec
             }
         }
     }).join().expect("Failed zero shot classification")
+}
+
+fn handleSplit(input: String, split: bool) -> Vec<String> {
+    let vec = if split { split_text(input.clone()) } else { vec!(input.clone()) };
+    vec
+}
+
+pub async fn keyword_extraction(input: String, split: bool) -> Result<Vec<Vec<Keyword>>, RustBertError> {
+    return thread::spawn(move || {
+        let vec = handleSplit(input, split);
+        let splits: Vec<&str> = vec.iter().map(|s| s.as_str()).collect();
+
+        let keyword_extraction_model = KeywordExtractionModel::new(Default::default())?;
+        let output = keyword_extraction_model.predict(&splits)?;
+        Ok(output)
+    }).join().expect("Failed keyword extraction")
 }
 
 fn convert_language(language: SupportedLanguage) -> Language {

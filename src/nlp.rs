@@ -75,15 +75,17 @@ fn split_text(input: String) -> Vec<String> {
     return vec
 }
 
-pub async fn zero_shot_classification(input: String, split: bool) -> Result<(Vec<String>, Vec<Vec<Label>>), RustBertError>{
+pub async fn zero_shot_classification(input: String, split: bool, labels: &Vec<String>)
+    -> Result<(Vec<String>, Vec<Vec<Label>>), RustBertError>{
 
+    let label_copy: Vec<String> = labels.iter().map(|l| l.clone()).collect();
     return thread::spawn(move || {
-        let vec = handleSplit(input, split);
+        let vec = handle_split(input, split);
         let splits: Vec<&str> = vec.iter().map(|s| s.as_str()).collect();
 
         let sequence_classification_model = ZeroShotClassificationModel::new(Default::default())?;
-        let candidate_labels = &["politics", "public health", "economics", "sports", "arts"];
 
+        let candidate_labels: Vec<&str> = label_copy.iter().map(|s| s.as_str()).collect();
         let output = sequence_classification_model.predict_multilabel(
             &splits,
             candidate_labels,
@@ -104,14 +106,14 @@ pub async fn zero_shot_classification(input: String, split: bool) -> Result<(Vec
     }).join().expect("Failed zero shot classification")
 }
 
-fn handleSplit(input: String, split: bool) -> Vec<String> {
+fn handle_split(input: String, split: bool) -> Vec<String> {
     let vec = if split { split_text(input.clone()) } else { vec!(input.clone()) };
     vec
 }
 
 pub async fn keyword_extraction(input: String, split: bool) -> Result<Vec<Vec<Keyword>>, RustBertError> {
     return thread::spawn(move || {
-        let vec = handleSplit(input, split);
+        let vec = handle_split(input, split);
         let splits: Vec<&str> = vec.iter().map(|s| s.as_str()).collect();
 
         let keyword_extraction_model = KeywordExtractionModel::new(Default::default())?;

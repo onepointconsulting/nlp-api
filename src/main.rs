@@ -33,7 +33,8 @@ struct TranslationRequest {
 #[derive(Deserialize)]
 struct ZeroShotRequest {
     orig_text: String,
-    split: bool
+    split: bool,
+    labels: Option<Vec<String>>
 }
 
 #[derive(Deserialize)]
@@ -110,7 +111,14 @@ async fn translate(info: web::Json<TranslationRequest>) -> impl Responder {
 
 #[post("/zero_shot")]
 async fn zero_shot_classification_service(request: web::Json<ZeroShotRequest>) -> impl Responder {
-    let res = zero_shot_classification(request.orig_text.clone(), request.split);
+    let labels = &request.labels.clone()
+        .unwrap_or(vec!["politics", "public health", "economics", "sports", "arts"].iter()
+            .map(|s| s.to_string()).collect());
+    let res = zero_shot_classification(
+        request.orig_text.clone(),
+        request.split,
+        labels
+    );
     match res.await {
         Ok(vecs) => {
             let (sentences, responses) = vecs;
@@ -120,7 +128,7 @@ async fn zero_shot_classification_service(request: web::Json<ZeroShotRequest>) -
                 status: String::from(STATUS_OK)
             })
         }
-        Err(e) => {
+        Err(_) => {
             HttpResponse::InternalServerError().json(ZeroShotResponse {
                 sentences: vec!(request.orig_text.clone()),
                 responses: vec!(),
@@ -144,7 +152,7 @@ async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>
             };
             HttpResponse::Ok().json(extraction_keyword)
         }
-        Err(e) => {
+        Err(_) => {
             HttpResponse::InternalServerError().json(ExtractionResponse {
                 results: vec![],
                 status: String::from(STATUS_FAILED)

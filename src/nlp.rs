@@ -4,6 +4,7 @@ use rust_bert::RustBertError;
 use std::thread;
 use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionModel};
 use rust_bert::pipelines::sequence_classification::Label;
+use rust_bert::pipelines::summarization::SummarizationModel;
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
 
 #[derive(Debug)]
@@ -120,6 +121,15 @@ pub async fn keyword_extraction(input: String, split: bool) -> Result<Vec<Vec<Ke
         let output = keyword_extraction_model.predict(&splits)?;
         Ok(output)
     }).join().expect("Failed keyword extraction")
+}
+
+pub async fn summarization(input_str: String) -> Result<String, RustBertError> {
+    return thread::spawn(move || {
+        let summarization_model = SummarizationModel::new(Default::default())?;
+        let output = summarization_model.summarize(&[input_str]);
+        let string = output[0].clone();
+        Ok(string)
+    }).join().expect("Failed summarization")
 }
 
 fn convert_language(language: SupportedLanguage) -> Language {

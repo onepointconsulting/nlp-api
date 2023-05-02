@@ -9,7 +9,7 @@ use chrono::{Datelike, Timelike, Utc};
 use rust_bert::pipelines::sequence_classification::Label;
 use crate::config::MainConfig;
 use serde::{Serialize, Deserialize};
-use crate::nlp::{keyword_extraction, SupportedLanguage, translate_input, zero_shot_classification};
+use crate::nlp::{keyword_extraction, summarization, SupportedLanguage, translate_input, zero_shot_classification};
 
 const STATUS_OK: &'static str = "OK";
 const STATUS_FAILED: &'static str = "Failed";
@@ -62,13 +62,11 @@ struct Info {
     timestamp: String,
 }
 
-
 #[derive(Serialize)]
 struct ExtractionResponse {
     results: Vec<Vec<ExtractionKeyword>>,
     status: String
 }
-
 
 #[derive(Serialize)]
 struct ExtractionKeyword {
@@ -76,6 +74,17 @@ struct ExtractionKeyword {
     pub text: String,
     /// Similarity score for the keyword
     pub score: f32,
+}
+
+#[derive(Deserialize)]
+struct SummarizationRequest {
+    orig_text: String
+}
+
+#[derive(Serialize)]
+struct SummarizationResponse {
+    text: String,
+    status: String
 }
 
 #[post("/translate")]
@@ -161,6 +170,25 @@ async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>
     }
 }
 
+#[post("/summarization")]
+async fn summarization_service(request: web::Json<SummarizationRequest>) -> impl Responder {
+    let res = summarization(request.orig_text.clone());
+    match res.await {
+        Ok(s) => {
+            HttpResponse::Ok().json(SummarizationResponse {
+                text: s,
+                status: STATUS_OK.to_string()
+            })
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(SummarizationResponse {
+                text: format!("{:?}", e),
+                status: STATUS_FAILED.to_string()
+            })
+        }
+    }
+}
+
 fn create_timestamp() -> String {
     let now = Utc::now();
     let (hour, day, month) = (now.hour(), now.day(), now.month());
@@ -196,6 +224,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Cors::permissive())
             .app_data(web::Data::new(config.clone()))
             .service(index)
+            .service(summarization_service)
             .service(translate)
             .service(zero_shot_classification_service)
             .service(keyword_extraction_service)

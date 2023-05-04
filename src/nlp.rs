@@ -1,11 +1,15 @@
 use std::str::FromStr;
-use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
-use rust_bert::RustBertError;
 use std::thread;
+
+use rust_bert::bart::{BartConfigResources, BartMergesResources, BartModelResources, BartVocabResources};
+use rust_bert::pipelines::common::ModelType;
 use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionModel};
 use rust_bert::pipelines::sequence_classification::Label;
-use rust_bert::pipelines::summarization::SummarizationModel;
+use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
+use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
+use rust_bert::resources::RemoteResource;
+use rust_bert::RustBertError;
 
 #[derive(Debug)]
 pub(crate) enum SupportedLanguage {
@@ -14,11 +18,10 @@ pub(crate) enum SupportedLanguage {
     Pt,
     En,
     De,
-    Nl
+    Nl,
 }
 
 impl FromStr for SupportedLanguage {
-
     type Err = ();
 
     fn from_str(input: &str) -> Result<SupportedLanguage, Self::Err> {
@@ -29,7 +32,7 @@ impl FromStr for SupportedLanguage {
             "de" => Ok(SupportedLanguage::De),
             "nl" => Ok(SupportedLanguage::Nl),
             "en" => Ok(SupportedLanguage::En),
-            _      => Err(()),
+            _ => Err(()),
         }
     }
 }
@@ -37,7 +40,6 @@ impl FromStr for SupportedLanguage {
 pub(crate) async fn translate_input(target_language: SupportedLanguage,
                                     source_language: SupportedLanguage,
                                     input: String) -> Result<String, RustBertError> {
-
     println!("Converting from {:?} to {:?}", source_language, target_language);
 
     return thread::spawn(move || {
@@ -54,7 +56,6 @@ pub(crate) async fn translate_input(target_language: SupportedLanguage,
 
         Ok(output.join(""))
     }).join().expect("Failed");
-
 }
 
 fn split_text(input: String) -> Vec<String> {
@@ -73,12 +74,11 @@ fn split_text(input: String) -> Vec<String> {
     if vec.len() == 0 {
         vec.push(input);
     }
-    return vec
+    return vec;
 }
 
 pub async fn zero_shot_classification(input: String, split: bool, labels: &Vec<String>)
-    -> Result<(Vec<String>, Vec<Vec<Label>>), RustBertError>{
-
+                                      -> Result<(Vec<String>, Vec<Vec<Label>>), RustBertError> {
     let label_copy: Vec<String> = labels.iter().map(|l| l.clone()).collect();
     return thread::spawn(move || {
         let vec = handle_split(input, split);
@@ -103,8 +103,8 @@ pub async fn zero_shot_classification(input: String, split: bool, labels: &Vec<S
                 let error = Err(e);
                 error
             }
-        }
-    }).join().expect("Failed zero shot classification")
+        };
+    }).join().expect("Failed zero shot classification");
 }
 
 fn handle_split(input: String, split: bool) -> Vec<String> {
@@ -120,16 +120,45 @@ pub async fn keyword_extraction(input: String, split: bool) -> Result<Vec<Vec<Ke
         let keyword_extraction_model = KeywordExtractionModel::new(Default::default())?;
         let output = keyword_extraction_model.predict(&splits)?;
         Ok(output)
-    }).join().expect("Failed keyword extraction")
+    }).join().expect("Failed keyword extraction");
 }
 
-pub async fn summarization(input_str: String) -> Result<String, RustBertError> {
+
+struct SummarizationConfigFactory;
+
+impl SummarizationConfigFactory {
+    fn distil_bart() -> SummarizationConfig {
+        SummarizationConfig::new(
+            ModelType::Bart,
+            RemoteResource::from_pretrained(BartModelResources::DISTILBART_CNN_6_6),
+            RemoteResource::from_pretrained(BartConfigResources::DISTILBART_CNN_6_6),
+            RemoteResource::from_pretrained(BartVocabResources::DISTILBART_CNN_6_6),
+            Some(RemoteResource::from_pretrained(BartMergesResources::DISTILBART_CNN_6_6)),
+        )
+    }
+}
+
+pub async fn summarization(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
+
+    let model_option_clone = model_option.clone();
+
     return thread::spawn(move || {
-        let summarization_model = SummarizationModel::new(Default::default())?;
+        let config = match model_option_clone {
+            Some(s) => {
+                match s.as_str() {
+                    "distilbart" => SummarizationConfigFactory::distil_bart(),
+                    _ => Default::default()
+                }
+            }
+            None => {
+                Default::default()
+            }
+        };
+        let summarization_model = SummarizationModel::new(config)?;
         let output = summarization_model.summarize(&[input_str]);
         let string = output[0].clone();
         Ok(string)
-    }).join().expect("Failed summarization")
+    }).join().expect("Failed summarization");
 }
 
 fn convert_language(language: SupportedLanguage) -> Language {
@@ -140,5 +169,5 @@ fn convert_language(language: SupportedLanguage) -> Language {
         SupportedLanguage::En => Language::English,
         SupportedLanguage::De => Language::German,
         SupportedLanguage::Nl => Language::Dutch
-    }
+    };
 }

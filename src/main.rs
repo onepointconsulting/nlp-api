@@ -1,4 +1,5 @@
 mod nlp;
+mod transport_structs;
 
 use std::str::FromStr;
 use dotenv::dotenv;
@@ -6,13 +7,9 @@ use ::config::Config;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, web, get, post};
 use chrono::{Datelike, Timelike, Utc};
-use rust_bert::pipelines::sequence_classification::Label;
 use crate::config::MainConfig;
-use serde::{Serialize, Deserialize};
 use crate::nlp::{keyword_extraction, summarization, SupportedLanguage, translate_input, zero_shot_classification};
-
-const STATUS_OK: &'static str = "OK";
-const STATUS_FAILED: &'static str = "Failed";
+use crate::transport_structs::{ErrorCodes, ExtractionKeyword, ExtractionResponse, Info, KeywordExtractionRequest, SummarizationRequest, SummarizationResponse, TranslationRequest, TranslationResponse, ZeroShotRequest, ZeroShotResponse};
 
 mod config {
     use serde::Deserialize;
@@ -21,70 +18,6 @@ mod config {
     pub struct MainConfig {
         pub server_addr: String
     }
-}
-
-#[derive(Deserialize)]
-struct TranslationRequest {
-    orig_text: String,
-    language: String,
-    source_language: Option<String>
-}
-
-#[derive(Deserialize)]
-struct ZeroShotRequest {
-    orig_text: String,
-    split: bool,
-    labels: Option<Vec<String>>
-}
-
-#[derive(Deserialize)]
-struct KeywordExtractionRequest {
-    orig_text: String,
-    split: bool
-}
-
-#[derive(Serialize)]
-struct ZeroShotResponse {
-    sentences: Vec<String>,
-    responses: Vec<Vec<Label>>,
-    status: String
-}
-
-#[derive(Deserialize,Serialize)]
-struct TranslationResponse {
-    orig_text: String,
-    translation: String
-}
-
-#[derive(Serialize)]
-struct Info {
-    message: String,
-    timestamp: String,
-}
-
-#[derive(Serialize)]
-struct ExtractionResponse {
-    results: Vec<Vec<ExtractionKeyword>>,
-    status: String
-}
-
-#[derive(Serialize)]
-struct ExtractionKeyword {
-    /// Keyword
-    pub text: String,
-    /// Similarity score for the keyword
-    pub score: f32,
-}
-
-#[derive(Deserialize)]
-struct SummarizationRequest {
-    orig_text: String
-}
-
-#[derive(Serialize)]
-struct SummarizationResponse {
-    text: String,
-    status: String
 }
 
 #[post("/translate")]
@@ -134,14 +67,14 @@ async fn zero_shot_classification_service(request: web::Json<ZeroShotRequest>) -
             HttpResponse::Ok().json(ZeroShotResponse {
                 sentences,
                 responses,
-                status: String::from(STATUS_OK)
+                status: String::from(ErrorCodes::STATUS_OK)
             })
         }
         Err(_) => {
             HttpResponse::InternalServerError().json(ZeroShotResponse {
                 sentences: vec!(request.orig_text.clone()),
                 responses: vec!(),
-                status: String::from(STATUS_FAILED)
+                status: String::from(ErrorCodes::STATUS_FAILED)
             })
         }
     }
@@ -157,14 +90,14 @@ async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>
                     .map(|k| ExtractionKeyword { text: k.text.clone(), score: k.score}).collect()).collect();
             let extraction_keyword = ExtractionResponse{
                 results: keyword_res,
-                status: String::from(STATUS_OK)
+                status: String::from(ErrorCodes::STATUS_OK)
             };
             HttpResponse::Ok().json(extraction_keyword)
         }
         Err(_) => {
             HttpResponse::InternalServerError().json(ExtractionResponse {
                 results: vec![],
-                status: String::from(STATUS_FAILED)
+                status: String::from(ErrorCodes::STATUS_FAILED)
             })
         }
     }
@@ -172,18 +105,20 @@ async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>
 
 #[post("/summarization")]
 async fn summarization_service(request: web::Json<SummarizationRequest>) -> impl Responder {
-    let res = summarization(request.orig_text.clone());
+    let model_option = &request.model;
+    let res = summarization(request.orig_text.clone(), model_option);
+
     match res.await {
         Ok(s) => {
             HttpResponse::Ok().json(SummarizationResponse {
                 text: s,
-                status: STATUS_OK.to_string()
+                status: ErrorCodes::STATUS_OK.to_string()
             })
         }
         Err(e) => {
             HttpResponse::InternalServerError().json(SummarizationResponse {
                 text: format!("{:?}", e),
-                status: STATUS_FAILED.to_string()
+                status: ErrorCodes::STATUS_FAILED.to_string()
             })
         }
     }

@@ -12,6 +12,8 @@ cargo run --color=always --package nlp-api --bin nlp-api
 
 ## Which APIs are provided?
 
+### Translation
+
 For now you can translate to multiple languages using a POST API to 
 
 `http://localhost:7000/translate`
@@ -32,6 +34,8 @@ This produces this result in German:
     "translation": " Der Vorteil von microfrontend ist, dass es eine Anwendung flexibler und einfacher zu pflegen macht."
 }
 ```
+
+### Zero-shot classification
 
 Another API is Zero shot classification using also the POST method:
 
@@ -86,4 +90,76 @@ You get this response:
 }
 ```
 
-Summarization and keyword generation are also supported.
+### Keyword Extraction
+
+You can extract keywords using POST with this URL:
+
+http://localhost:7000/keyword_extraction
+
+Example Request:
+
+```
+{
+    "orig_text": "The UK and US have intervened in the race to develop ever more powerful artificial intelligence technology, as the British competition watchdog launched a review of the sector and the White House advised tech firms of their fundamental responsibility to develop safe products. Regulators are under mounting pressure to intervene, as the emergence of AI-powered language generators such as ChatGPT raises concerns about the potential spread of misinformation, a rise in fraud and the impact on the jobs market, with Elon Musk among nearly 30,000 signatories to a letter published last month urging a pause in significant projects.",
+    "split": false
+}
+```
+
+Example Response:
+
+```
+{
+    "results": [
+        [
+            {
+                "text": "ai",
+                "score": 0.35659212
+            },
+            {
+                "text": "technology",
+                "score": 0.34206712
+            },
+            {
+                "text": "firms",
+                "score": 0.32378998
+            },
+            {
+                "text": "fraud",
+                "score": 0.3114852
+            },
+            {
+                "text": "musk",
+                "score": 0.31099826
+            }
+        ]
+    ],
+    "status": "OK"
+}
+```
+
+
+### Summarization
+
+You can summarize using POST with this URL:
+
+http://localhost:7000/summarization
+
+With this example content:
+
+```
+{
+    "orig_text": "The UK and US have intervened in the race to develop ever more powerful artificial intelligence technology, as the British competition watchdog launched a review of the sector and the White House advised tech firms of their fundamental responsibility to develop safe products. Regulators are under mounting pressure to intervene, as the emergence of AI-powered language generators such as ChatGPT raises concerns about the potential spread of misinformation, a rise in fraud and the impact on the jobs market, with Elon Musk among nearly 30,000 signatories to a letter published last month urging a pause in significant projects.",
+    "model": "distilbart"
+}
+```
+
+Which returns:
+
+```
+{
+"text": " UK and US have intervened in the race to develop ever more powerful artificial intelligence technology. The UK competition watchdog launched a review of the sector and the White House advised tech firms of their fundamental responsibility to develop safe products. Regulators are under mounting pressure to intervene as the emergence of AI-powered language generators such as ChatGPT raises concerns about",
+"status": "OK"
+}
+```
+
+

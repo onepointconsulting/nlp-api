@@ -3,6 +3,7 @@ use std::thread;
 
 use rust_bert::bart::{BartConfigResources, BartMergesResources, BartModelResources, BartVocabResources};
 use rust_bert::pipelines::common::ModelType;
+use rust_bert::pipelines::conversation::{ConversationManager, ConversationModel};
 use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionModel};
 use rust_bert::pipelines::sequence_classification::Label;
 use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
@@ -10,6 +11,7 @@ use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
 use rust_bert::resources::RemoteResource;
 use rust_bert::RustBertError;
+use rust_bert::t5::{T5ConfigResources, T5ModelResources, T5VocabResources};
 
 #[derive(Debug)]
 pub(crate) enum SupportedLanguage {
@@ -136,6 +138,15 @@ impl SummarizationConfigFactory {
             Some(RemoteResource::from_pretrained(BartMergesResources::DISTILBART_CNN_6_6)),
         )
     }
+    fn t5() -> SummarizationConfig {
+        SummarizationConfig::new(
+            ModelType::T5,
+            RemoteResource::from_pretrained(T5ModelResources::T5_BASE),
+            RemoteResource::from_pretrained(T5ConfigResources::T5_BASE),
+            RemoteResource::from_pretrained(T5VocabResources::T5_BASE),
+            None,
+        )
+    }
 }
 
 pub async fn summarization(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
@@ -147,6 +158,7 @@ pub async fn summarization(input_str: String, model_option: &Option<String>) -> 
             Some(s) => {
                 match s.as_str() {
                     "distilbart" => SummarizationConfigFactory::distil_bart(),
+                    "t5" => SummarizationConfigFactory::t5(),
                     _ => Default::default()
                 }
             }
@@ -159,6 +171,20 @@ pub async fn summarization(input_str: String, model_option: &Option<String>) -> 
         let string = output[0].clone();
         Ok(string)
     }).join().expect("Failed summarization");
+}
+
+pub async fn dialogue(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
+
+    return thread::spawn(move || {
+        let conversation_model = ConversationModel::new(Default::default())?;
+        let mut conversation_manager = ConversationManager::new();
+
+        let conversation_id = conversation_manager.create(input_str.as_str());
+        let map = conversation_model.generate_responses(&mut conversation_manager);
+        let string_list = map.iter().map(|kv| kv.1.to_string()).collect::<Vec<String>>();
+        Ok(string_list.join(" "))
+
+    }).join().expect("Failed dialogue");
 }
 
 fn convert_language(language: SupportedLanguage) -> Language {

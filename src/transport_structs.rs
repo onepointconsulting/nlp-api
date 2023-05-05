@@ -67,8 +67,14 @@ pub(crate) struct SummarizationRequest {
     pub(crate) model: Option<String>
 }
 
+#[derive(Deserialize)]
+pub(crate) struct DialogueRequest {
+    pub(crate) question: String,
+    pub(crate) model: Option<String>
+}
+
 #[derive(Serialize)]
-pub(crate) struct SummarizationResponse {
+pub(crate) struct SimpleTextResponse {
     pub(crate) text: String,
     pub(crate) status: String
 }

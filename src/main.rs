@@ -1,15 +1,17 @@
 mod nlp;
 mod transport_structs;
 
+use std::future::Future;
 use std::str::FromStr;
 use dotenv::dotenv;
 use ::config::Config;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, web, get, post};
 use chrono::{Datelike, Timelike, Utc};
+use rust_bert::RustBertError;
 use crate::config::MainConfig;
-use crate::nlp::{keyword_extraction, summarization, SupportedLanguage, translate_input, zero_shot_classification};
-use crate::transport_structs::{ErrorCodes, ExtractionKeyword, ExtractionResponse, Info, KeywordExtractionRequest, SummarizationRequest, SummarizationResponse, TranslationRequest, TranslationResponse, ZeroShotRequest, ZeroShotResponse};
+use crate::nlp::{dialogue, keyword_extraction, summarization, SupportedLanguage, translate_input, zero_shot_classification};
+use crate::transport_structs::{DialogueRequest, ErrorCodes, ExtractionKeyword, ExtractionResponse, Info, KeywordExtractionRequest, SummarizationRequest, SimpleTextResponse, TranslationRequest, TranslationResponse, ZeroShotRequest, ZeroShotResponse};
 
 mod config {
     use serde::Deserialize;
@@ -107,22 +109,36 @@ async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>
 async fn summarization_service(request: web::Json<SummarizationRequest>) -> impl Responder {
     let model_option = &request.model;
     let res = summarization(request.orig_text.clone(), model_option);
+    process_simple_text_response(res).await
+}
 
+fn create_simple_text_error(e: RustBertError) -> HttpResponse {
+    HttpResponse::InternalServerError().json(SimpleTextResponse {
+        text: format!("{:?}", e),
+        status: ErrorCodes::STATUS_FAILED.to_string()
+    })
+}
+
+#[post("/dialogue")]
+async fn dialogue_service(request: web::Json<DialogueRequest>) -> impl Responder {
+    let res = dialogue(request.question.clone(), &request.model);
+    process_simple_text_response(res).await
+}
+
+async fn process_simple_text_response(res: impl Future<Output=Result<String, RustBertError>>) -> HttpResponse {
     match res.await {
         Ok(s) => {
-            HttpResponse::Ok().json(SummarizationResponse {
+            HttpResponse::Ok().json(SimpleTextResponse {
                 text: s,
                 status: ErrorCodes::STATUS_OK.to_string()
             })
         }
         Err(e) => {
-            HttpResponse::InternalServerError().json(SummarizationResponse {
-                text: format!("{:?}", e),
-                status: ErrorCodes::STATUS_FAILED.to_string()
-            })
+            create_simple_text_error(e)
         }
     }
 }
+
 
 fn create_timestamp() -> String {
     let now = Utc::now();
@@ -163,6 +179,7 @@ async fn main() -> std::io::Result<()> {
             .service(translate)
             .service(zero_shot_classification_service)
             .service(keyword_extraction_service)
+            .service(dialogue_service)
     })
         .bind(server_addr)?
         .run()

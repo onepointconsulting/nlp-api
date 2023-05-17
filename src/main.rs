@@ -84,7 +84,7 @@ async fn zero_shot_classification_service(request: web::Json<ZeroShotRequest>) -
 
 #[post("/keyword_extraction")]
 async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>) -> impl Responder {
-    let res = keyword_extraction(request.orig_text.clone(), request.split);
+    let res = keyword_extraction(request);
     match res.await {
         Ok(vec) => {
             let keyword_res = vec.iter()
@@ -122,7 +122,7 @@ fn create_simple_text_error(e: RustBertError) -> HttpResponse {
 #[post("/dialogue")]
 async fn dialogue_service(request: web::Json<DialogueRequest>) -> impl Responder {
     let res = dialogue(request.question.clone(), &request.model);
-    process_simple_text_response(res).await
+    return process_simple_text_response(res).await;
 }
 
 async fn process_simple_text_response(res: impl Future<Output=Result<String, RustBertError>>) -> HttpResponse {

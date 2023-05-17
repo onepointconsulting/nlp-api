@@ -101,7 +101,9 @@ Example Request:
 ```
 {
     "orig_text": "The UK and US have intervened in the race to develop ever more powerful artificial intelligence technology, as the British competition watchdog launched a review of the sector and the White House advised tech firms of their fundamental responsibility to develop safe products. Regulators are under mounting pressure to intervene, as the emergence of AI-powered language generators such as ChatGPT raises concerns about the potential spread of misinformation, a rise in fraud and the impact on the jobs market, with Elon Musk among nearly 30,000 signatories to a letter published last month urging a pause in significant projects.",
-    "split": false
+    "split": false,
+    "how_many": 5,
+    "ngram_range": [1, 2]
 }
 ```
 
@@ -112,24 +114,24 @@ Example Response:
     "results": [
         [
             {
+                "text": "intelligence technology",
+                "score": 0.46841103
+            },
+            {
+                "text": "tech firms",
+                "score": 0.3784055
+            },
+            {
                 "text": "ai",
                 "score": 0.35659212
             },
             {
+                "text": "competition watchdog",
+                "score": 0.34823602
+            },
+            {
                 "text": "technology",
                 "score": 0.34206712
-            },
-            {
-                "text": "firms",
-                "score": 0.32378998
-            },
-            {
-                "text": "fraud",
-                "score": 0.3114852
-            },
-            {
-                "text": "musk",
-                "score": 0.31099826
             }
         ]
     ],
@@ -161,5 +163,7 @@ Which returns:
 "status": "OK"
 }
 ```
+
+### Dialogue
 
 

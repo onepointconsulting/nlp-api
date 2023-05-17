@@ -23,9 +23,11 @@ pub(crate) struct ZeroShotRequest {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct KeywordExtractionRequest {
-    pub(crate) orig_text: String,
-    pub(crate) split: bool
+pub struct KeywordExtractionRequest {
+    pub orig_text: String,
+    pub split: bool,
+    pub how_many: Option<usize>,
+    pub ngram_range: Option<(usize, usize)>
 }
 
 #[derive(Serialize)]

@@ -1,10 +1,12 @@
 use std::str::FromStr;
 use std::thread;
+use actix_web::web;
 
 use rust_bert::bart::{BartConfigResources, BartMergesResources, BartModelResources, BartVocabResources};
 use rust_bert::pipelines::common::ModelType;
 use rust_bert::pipelines::conversation::{ConversationManager, ConversationModel};
-use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionModel};
+use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionConfig, KeywordExtractionModel, KeywordScorerType};
+use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsConfig, SentenceEmbeddingsModelType};
 use rust_bert::pipelines::sequence_classification::Label;
 use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
 use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
@@ -12,6 +14,7 @@ use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
 use rust_bert::resources::RemoteResource;
 use rust_bert::RustBertError;
 use rust_bert::t5::{T5ConfigResources, T5ModelResources, T5VocabResources};
+use crate::KeywordExtractionRequest;
 
 #[derive(Debug)]
 pub(crate) enum SupportedLanguage {
@@ -114,17 +117,70 @@ fn handle_split(input: String, split: bool) -> Vec<String> {
     vec
 }
 
-pub async fn keyword_extraction(input: String, split: bool) -> Result<Vec<Vec<Keyword>>, RustBertError> {
+struct KeywordConfigFactory;
+
+impl KeywordConfigFactory {
+    fn variable_keyword_number<'a>(how_many: usize) -> KeywordExtractionConfig<'a> {
+        let sentence_embeddings_config =
+            SentenceEmbeddingsConfig::from(SentenceEmbeddingsModelType::AllMiniLmL6V2);
+
+        KeywordExtractionConfig {
+            sentence_embeddings_config,
+            tokenizer_stopwords: None,
+            tokenizer_pattern: None,
+            scorer_type: KeywordScorerType::CosineSimilarity,
+            ngram_range: (1, 1),
+            num_keywords: how_many,
+            diversity: None,
+            max_sum_candidates: None,
+        }
+    }
+
+    fn variable_keyword_number_ngram<'a>(how_many: usize, ngram_range: (usize, usize)) -> KeywordExtractionConfig<'a> {
+        let sentence_embeddings_config =
+            SentenceEmbeddingsConfig::from(SentenceEmbeddingsModelType::AllMiniLmL6V2);
+
+        KeywordExtractionConfig {
+            sentence_embeddings_config,
+            tokenizer_stopwords: None,
+            tokenizer_pattern: None,
+            scorer_type: KeywordScorerType::CosineSimilarity,
+            ngram_range,
+            num_keywords: how_many,
+            diversity: None,
+            max_sum_candidates: None,
+        }
+    }
+}
+
+pub async fn keyword_extraction(
+    request: web::Json<KeywordExtractionRequest>) ->
+    Result<Vec<Vec<Keyword>>, RustBertError> {
+
+    let input: String = request.orig_text.clone();
+    let split: bool = request.split;
+    let how_many_option: Option<usize> = request.how_many;
+    let ngram_range: Option<(usize, usize)> = request.ngram_range;
+
     return thread::spawn(move || {
         let vec = handle_split(input, split);
         let splits: Vec<&str> = vec.iter().map(|s| s.as_str()).collect();
-
-        let keyword_extraction_model = KeywordExtractionModel::new(Default::default())?;
+        let keyword_extraction_model = if how_many_option.is_some() && ngram_range.is_some() {
+            KeywordConfigFactory::variable_keyword_number_ngram(
+                how_many_option.unwrap(), ngram_range.unwrap())
+        } else if how_many_option.is_some() {
+            KeywordConfigFactory::variable_keyword_number(how_many_option.unwrap())
+        } else if ngram_range.is_some() {
+            KeywordConfigFactory::variable_keyword_number_ngram(
+                5, ngram_range.unwrap())
+        } else {
+            Default::default()
+        };
+        let keyword_extraction_model = KeywordExtractionModel::new(keyword_extraction_model)?;
         let output = keyword_extraction_model.predict(&splits)?;
         Ok(output)
     }).join().expect("Failed keyword extraction");
 }
-
 
 struct SummarizationConfigFactory;
 
@@ -150,7 +206,6 @@ impl SummarizationConfigFactory {
 }
 
 pub async fn summarization(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
-
     let model_option_clone = model_option.clone();
 
     return thread::spawn(move || {
@@ -174,7 +229,6 @@ pub async fn summarization(input_str: String, model_option: &Option<String>) -> 
 }
 
 pub async fn dialogue(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
-
     return thread::spawn(move || {
         let conversation_model = ConversationModel::new(Default::default())?;
         let mut conversation_manager = ConversationManager::new();
@@ -183,7 +237,6 @@ pub async fn dialogue(input_str: String, model_option: &Option<String>) -> Resul
         let map = conversation_model.generate_responses(&mut conversation_manager);
         let string_list = map.iter().map(|kv| kv.1.to_string()).collect::<Vec<String>>();
         Ok(string_list.join(" "))
-
     }).join().expect("Failed dialogue");
 }
 

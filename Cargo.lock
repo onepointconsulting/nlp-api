@@ -945,12 +945,6 @@ dependencies = [
 
 [[package]]
 name = "half"
-version = "1.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
-
-[[package]]
-name = "half"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b4af3693f1b705df946e9fe5631932443781d0aabb423b62fcd4d73f6d2fd0"
@@ -965,6 +959,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash 0.7.6",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
+dependencies = [
+ "ahash 0.8.3",
 ]
 
 [[package]]
@@ -1103,7 +1106,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
 dependencies = [
  "autocfg",
- "hashbrown",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -1363,6 +1366,7 @@ dependencies = [
  "dotenv",
  "rust-bert",
  "serde",
+ "threadpool",
 ]
 
 [[package]]
@@ -1491,7 +1495,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccd746e37177e1711c20dd619a1620f34f5c8b569c53590a72dedd5344d8924a"
 dependencies = [
  "dlv-list",
- "hashbrown",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -1819,13 +1823,13 @@ dependencies = [
 
 [[package]]
 name = "rust-bert"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82fc88f12e83c88ec44d2b64eaca46937f3c1159d8b038e1502c897388f7e69b"
+checksum = "8792cccdf842159ef04a35f247df68ccc42192e9a67e389e6cd0f1a83970a6a0"
 dependencies = [
  "cached-path",
  "dirs",
- "half 2.2.1",
+ "half",
  "lazy_static",
  "ordered-float",
  "regex",
@@ -1849,12 +1853,12 @@ dependencies = [
 
 [[package]]
 name = "rust_tokenizers"
-version = "7.0.2"
+version = "8.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "196e3b77b07fd5bfcbc8187ecaef5d5931820d9abd6c3fe0a9dc6d3ddb035d72"
+checksum = "1f367f6b13bc686e822237b97caeb4b2e366dd1936ec204f11d266ede402c31b"
 dependencies = [
  "csv",
- "hashbrown",
+ "hashbrown 0.13.2",
  "itertools",
  "lazy_static",
  "protobuf",
@@ -1907,6 +1911,16 @@ name = "ryu"
 version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f91339c0467de62360649f8d3e185ca8de4224ff281f66000de5eb2a77a79041"
+
+[[package]]
+name = "safetensors"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d818a2cb3f564a1844be835011acf5c7ec8ad1986a47f73abc7b5fea91cc3a"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "schannel"
@@ -2114,15 +2128,16 @@ dependencies = [
 
 [[package]]
 name = "tch"
-version = "0.10.3"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7682709b8e3df9bc3d37c07117f5f31373efb855e8b4afb3bcc1cea57fd4b2e"
+checksum = "9cbd9ce6fb581a1b918db880b649d1364b50f7f6717eda8497bcdc929cddd4b9"
 dependencies = [
- "half 1.8.2",
+ "half",
  "lazy_static",
  "libc",
  "ndarray",
  "rand",
+ "safetensors",
  "thiserror",
  "torch-sys",
  "zip",
@@ -2168,6 +2183,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.15",
+]
+
+[[package]]
+name = "threadpool"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
+dependencies = [
+ "num_cpus",
 ]
 
 [[package]]
@@ -2276,13 +2300,15 @@ dependencies = [
 
 [[package]]
 name = "torch-sys"
-version = "0.10.3"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8dcadb2fd6a5cc22e628fee943842bf7a283723ef1cd9e0bd338f54875315ab"
+checksum = "42b2b81a479510717464df1d07c02cb4aebb26539a39b5db6637dda114a476cb"
 dependencies = [
  "anyhow",
  "cc",
  "libc",
+ "serde",
+ "serde_json",
  "ureq",
  "zip",
 ]
@@ -2385,6 +2411,8 @@ dependencies = [
  "log",
  "once_cell",
  "rustls",
+ "serde",
+ "serde_json",
  "url",
  "webpki",
  "webpki-roots",

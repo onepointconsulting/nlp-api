@@ -1,9 +1,13 @@
 use std::str::FromStr;
+use std::sync::mpsc::channel;
 use std::thread;
-use actix_web::web;
 
+use actix_web::web;
 use rust_bert::bart::{BartConfigResources, BartMergesResources, BartModelResources, BartVocabResources};
-use rust_bert::pipelines::common::ModelType;
+use rust_bert::bert::BertConfigResources;
+use rust_bert::deberta::DebertaConfigResources;
+use rust_bert::pegasus::{PegasusConfigResources, PegasusModelResources, PegasusVocabResources};
+use rust_bert::pipelines::common::{ModelResource, ModelType};
 use rust_bert::pipelines::conversation::{ConversationManager, ConversationModel};
 use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionConfig, KeywordExtractionModel, KeywordScorerType};
 use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsConfig, SentenceEmbeddingsModelType};
@@ -11,9 +15,13 @@ use rust_bert::pipelines::sequence_classification::Label;
 use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
 use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
+use rust_bert::prophetnet::{ProphetNetConfigResources, ProphetNetModelResources, ProphetNetVocabResources};
 use rust_bert::resources::RemoteResource;
+use rust_bert::roberta::RobertaConfigResources;
 use rust_bert::RustBertError;
 use rust_bert::t5::{T5ConfigResources, T5ModelResources, T5VocabResources};
+use threadpool::ThreadPool;
+
 use crate::KeywordExtractionRequest;
 
 #[derive(Debug)]
@@ -155,8 +163,7 @@ impl KeywordConfigFactory {
 
 pub async fn keyword_extraction(
     request: web::Json<KeywordExtractionRequest>) ->
-    Result<Vec<Vec<Keyword>>, RustBertError> {
-
+Result<Vec<Vec<Keyword>>, RustBertError> {
     let input: String = request.orig_text.clone();
     let split: bool = request.split;
     let how_many_option: Option<usize> = request.how_many;
@@ -188,20 +195,33 @@ impl SummarizationConfigFactory {
     fn distil_bart() -> SummarizationConfig {
         SummarizationConfig::new(
             ModelType::Bart,
-            RemoteResource::from_pretrained(BartModelResources::DISTILBART_CNN_6_6),
+            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
+                BartModelResources::DISTILBART_CNN_6_6,
+            ))),
             RemoteResource::from_pretrained(BartConfigResources::DISTILBART_CNN_6_6),
             RemoteResource::from_pretrained(BartVocabResources::DISTILBART_CNN_6_6),
             Some(RemoteResource::from_pretrained(BartMergesResources::DISTILBART_CNN_6_6)),
         )
     }
-    fn t5() -> SummarizationConfig {
+    fn pegasus() -> SummarizationConfig {
         SummarizationConfig::new(
-            ModelType::T5,
-            RemoteResource::from_pretrained(T5ModelResources::T5_BASE),
-            RemoteResource::from_pretrained(T5ConfigResources::T5_BASE),
-            RemoteResource::from_pretrained(T5VocabResources::T5_BASE),
-            None,
-        )
+            ModelType::Pegasus,
+            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
+                PegasusModelResources::CNN_DAILYMAIL,
+            ))),
+            RemoteResource::from_pretrained(PegasusConfigResources::CNN_DAILYMAIL),
+            RemoteResource::from_pretrained(PegasusVocabResources::CNN_DAILYMAIL),
+            None)
+    }
+    fn prophetnet() -> SummarizationConfig {
+        SummarizationConfig::new(
+            ModelType::ProphetNet,
+            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
+                ProphetNetModelResources::PROPHETNET_LARGE_UNCASED,
+            ))),
+            RemoteResource::from_pretrained(ProphetNetConfigResources::PROPHETNET_LARGE_UNCASED),
+            RemoteResource::from_pretrained(ProphetNetVocabResources::PROPHETNET_LARGE_UNCASED),
+            None)
     }
 }
 
@@ -213,7 +233,8 @@ pub async fn summarization(input_str: String, model_option: &Option<String>) -> 
             Some(s) => {
                 match s.as_str() {
                     "distilbart" => SummarizationConfigFactory::distil_bart(),
-                    "t5" => SummarizationConfigFactory::t5(),
+                    "pegasus" => SummarizationConfigFactory::pegasus(),
+                    "prophetnet" => SummarizationConfigFactory::prophetnet(),
                     _ => Default::default()
                 }
             }
@@ -228,16 +249,24 @@ pub async fn summarization(input_str: String, model_option: &Option<String>) -> 
     }).join().expect("Failed summarization");
 }
 
-pub async fn dialogue(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
-    return thread::spawn(move || {
-        let conversation_model = ConversationModel::new(Default::default())?;
-        let mut conversation_manager = ConversationManager::new();
-
-        let conversation_id = conversation_manager.create(input_str.as_str());
-        let map = conversation_model.generate_responses(&mut conversation_manager);
-        let string_list = map.iter().map(|kv| kv.1.to_string()).collect::<Vec<String>>();
-        Ok(string_list.join(" "))
-    }).join().expect("Failed dialogue");
+pub async fn dialogue(input_str: String, model_option: &Option<String>, pool: web::Data<ThreadPool>) -> Result<String, RustBertError> {
+    let (tx, rx) = channel();
+    pool.execute(move || {
+        let conversation_model_res = ConversationModel::new(Default::default());
+        match conversation_model_res {
+            Ok(conversation_model) => {
+                let mut conversation_manager = ConversationManager::new();
+                let conversation_id = conversation_manager.create(input_str.as_str());
+                let map = conversation_model.generate_responses(&mut conversation_manager);
+                let string_list = map.iter().map(|kv| kv.1.to_string()).collect::<Vec<String>>();
+                tx.send(Ok(string_list.join(" ")));
+            }
+            Err(e) => {
+                tx.send(Err(e));
+            }
+        }
+    });
+    rx.recv().unwrap()
 }
 
 fn convert_language(language: SupportedLanguage) -> Language {

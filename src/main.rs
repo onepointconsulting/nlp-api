@@ -3,12 +3,14 @@ mod transport_structs;
 
 use std::future::Future;
 use std::str::FromStr;
+use std::sync::mpsc::channel;
 use dotenv::dotenv;
 use ::config::Config;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, web, get, post};
 use chrono::{Datelike, Timelike, Utc};
 use rust_bert::RustBertError;
+use threadpool::ThreadPool;
 use crate::config::MainConfig;
 use crate::nlp::{dialogue, keyword_extraction, summarization, SupportedLanguage, translate_input, zero_shot_classification};
 use crate::transport_structs::{DialogueRequest, ErrorCodes, ExtractionKeyword, ExtractionResponse, Info, KeywordExtractionRequest, SummarizationRequest, SimpleTextResponse, TranslationRequest, TranslationResponse, ZeroShotRequest, ZeroShotResponse};
@@ -18,7 +20,7 @@ mod config {
 
     #[derive(Debug, Default, Deserialize, Clone)]
     pub struct MainConfig {
-        pub server_addr: String
+        pub server_addr: String,
     }
 }
 
@@ -120,8 +122,10 @@ fn create_simple_text_error(e: RustBertError) -> HttpResponse {
 }
 
 #[post("/dialogue")]
-async fn dialogue_service(request: web::Json<DialogueRequest>) -> impl Responder {
-    let res = dialogue(request.question.clone(), &request.model);
+async fn dialogue_service(request: web::Json<DialogueRequest>, pool: web::Data<ThreadPool>) -> impl Responder {
+    let res = dialogue(
+        request.question.clone(), &request.model, pool
+    );
     return process_simple_text_response(res).await;
 }
 
@@ -149,10 +153,16 @@ fn create_timestamp() -> String {
 }
 
 #[get("/")]
-async fn index() -> impl Responder {
+async fn index(config: web::Data<MainConfig>, pool: web::Data<ThreadPool>) -> impl Responder {
     let timestamp = create_timestamp();
+    let (tx, rx) = channel();
+    pool.execute(move || {
+        tx.send("Welcome to NLP API!".to_string()).expect("channel will be there waiting for the pool")
+    });
+    let msg = rx.recv().unwrap();
     HttpResponse::Ok().json(Info {
-        message: "Welcome to NLP API!".to_string(),
+        message: msg,
+        server_address: config.server_addr.clone(),
         timestamp,
     })
 }
@@ -171,9 +181,12 @@ async fn main() -> std::io::Result<()> {
     let server_addr = config.server_addr.clone();
 
     HttpServer::new(move || {
+        let num_workers = 4;
+        let pool = ThreadPool::new(num_workers);
         App::new()
             .wrap(Cors::permissive())
             .app_data(web::Data::new(config.clone()))
+            .app_data(web::Data::new(pool))
             .service(index)
             .service(summarization_service)
             .service(translate)

@@ -47,6 +47,7 @@ pub(crate) struct TranslationResponse {
 pub(crate) struct Info {
     pub(crate) message: String,
     pub(crate) timestamp: String,
+    pub(crate) server_address: String,
 }
 
 #[derive(Serialize)]

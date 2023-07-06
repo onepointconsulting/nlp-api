@@ -108,9 +108,11 @@ async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>
 }
 
 #[post("/summarization")]
-async fn summarization_service(request: web::Json<SummarizationRequest>) -> impl Responder {
+async fn summarization_service(request: web::Json<SummarizationRequest>, pool: web::Data<ThreadPool>) -> impl Responder {
     let model_option = &request.model;
-    let res = summarization(request.orig_text.clone(), model_option);
+    let res = summarization(
+        request.orig_text.clone(), model_option, pool
+    );
     process_simple_text_response(res).await
 }
 
@@ -124,7 +126,7 @@ fn create_simple_text_error(e: RustBertError) -> HttpResponse {
 #[post("/dialogue")]
 async fn dialogue_service(request: web::Json<DialogueRequest>, pool: web::Data<ThreadPool>) -> impl Responder {
     let res = dialogue(
-        request.question.clone(), &request.model, pool
+        request.question.clone(), pool
     );
     return process_simple_text_response(res).await;
 }

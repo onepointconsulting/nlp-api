@@ -72,8 +72,7 @@ pub(crate) struct SummarizationRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct DialogueRequest {
-    pub(crate) question: String,
-    pub(crate) model: Option<String>
+    pub(crate) question: String
 }
 
 #[derive(Serialize)]

@@ -4,8 +4,7 @@ use std::thread;
 
 use actix_web::web;
 use rust_bert::bart::{BartConfigResources, BartMergesResources, BartModelResources, BartVocabResources};
-use rust_bert::bert::BertConfigResources;
-use rust_bert::deberta::DebertaConfigResources;
+use rust_bert::longt5::{LongT5ConfigResources, LongT5ModelResources, LongT5VocabResources};
 use rust_bert::pegasus::{PegasusConfigResources, PegasusModelResources, PegasusVocabResources};
 use rust_bert::pipelines::common::{ModelResource, ModelType};
 use rust_bert::pipelines::conversation::{ConversationManager, ConversationModel};
@@ -17,7 +16,6 @@ use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
 use rust_bert::prophetnet::{ProphetNetConfigResources, ProphetNetModelResources, ProphetNetVocabResources};
 use rust_bert::resources::RemoteResource;
-use rust_bert::roberta::RobertaConfigResources;
 use rust_bert::RustBertError;
 use rust_bert::t5::{T5ConfigResources, T5ModelResources, T5VocabResources};
 use threadpool::ThreadPool;
@@ -223,18 +221,30 @@ impl SummarizationConfigFactory {
             RemoteResource::from_pretrained(ProphetNetVocabResources::PROPHETNET_LARGE_UNCASED),
             None)
     }
+    fn long_t5() -> SummarizationConfig {
+        SummarizationConfig::new(
+            ModelType::LongT5,
+            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
+                LongT5ModelResources::TGLOBAL_BASE_BOOK_SUMMARY,
+            ))),
+            RemoteResource::from_pretrained(LongT5ConfigResources::TGLOBAL_BASE_BOOK_SUMMARY),
+            RemoteResource::from_pretrained(LongT5VocabResources::TGLOBAL_BASE_BOOK_SUMMARY),
+            None)
+    }
 }
 
-pub async fn summarization(input_str: String, model_option: &Option<String>) -> Result<String, RustBertError> {
+pub async fn summarization(input_str: String, model_option: &Option<String>, pool: web::Data<ThreadPool>)
+    -> Result<String, RustBertError> {
     let model_option_clone = model_option.clone();
-
-    return thread::spawn(move || {
+    let (tx, rx) = channel();
+    pool.execute(move || {
         let config = match model_option_clone {
             Some(s) => {
                 match s.as_str() {
                     "distilbart" => SummarizationConfigFactory::distil_bart(),
                     "pegasus" => SummarizationConfigFactory::pegasus(),
                     "prophetnet" => SummarizationConfigFactory::prophetnet(),
+                    "long_t5" => SummarizationConfigFactory::long_t5(),
                     _ => Default::default()
                 }
             }
@@ -242,14 +252,23 @@ pub async fn summarization(input_str: String, model_option: &Option<String>) -> 
                 Default::default()
             }
         };
-        let summarization_model = SummarizationModel::new(config)?;
-        let output = summarization_model.summarize(&[input_str]);
-        let string = output[0].clone();
-        Ok(string)
-    }).join().expect("Failed summarization");
+        let summarization_model_result = SummarizationModel::new(config);
+        match summarization_model_result {
+            Ok(summarization_model) => {
+                let output = summarization_model.summarize(&[input_str]);
+                let _ = tx.send(Ok(output.join(" ").clone()));
+            }
+            Err(e) => {
+                let _ = tx.send(Err(e));
+            }
+        }
+
+    });
+    rx.recv().unwrap()
 }
 
-pub async fn dialogue(input_str: String, model_option: &Option<String>, pool: web::Data<ThreadPool>) -> Result<String, RustBertError> {
+pub async fn dialogue(input_str: String, pool: web::Data<ThreadPool>)
+    -> Result<String, RustBertError> {
     let (tx, rx) = channel();
     pool.execute(move || {
         let conversation_model_res = ConversationModel::new(Default::default());
@@ -259,10 +278,10 @@ pub async fn dialogue(input_str: String, model_option: &Option<String>, pool: we
                 let conversation_id = conversation_manager.create(input_str.as_str());
                 let map = conversation_model.generate_responses(&mut conversation_manager);
                 let string_list = map.iter().map(|kv| kv.1.to_string()).collect::<Vec<String>>();
-                tx.send(Ok(string_list.join(" ")));
+                let _ = tx.send(Ok(string_list.join(" ")));
             }
             Err(e) => {
-                tx.send(Err(e));
+                let _ = tx.send(Err(e));
             }
         }
     });

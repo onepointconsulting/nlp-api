@@ -1,0 +1,134 @@
+{
+	"info": {
+		"_postman_id": "d407f5a0-1598-45b8-a26b-d85e7f22dc1a",
+		"name": "NLP API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Keyword Extraction",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"content-type": true
+				}
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-type",
+						"value": "application/json",
+						"type": "default"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"orig_text\": \"Who was Albert Einstein?\",\r\n    \"ngram_range\": 2,\r\n    \"split\": false\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:7000/keyword_extraction",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "7000",
+					"path": [
+						"keyword_extraction"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Summarization",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"content-type": true
+				}
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-type",
+						"value": "application/json",
+						"type": "default"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"orig_text\": \"The UK and US have intervened in the race to develop ever more powerful artificial intelligence technology, as the British competition watchdog launched a review of the sector and the White House advised tech firms of their fundamental responsibility to develop safe products. Regulators are under mounting pressure to intervene, as the emergence of AI-powered language generators such as ChatGPT raises concerns about the potential spread of misinformation, a rise in fraud and the impact on the jobs market, with Elon Musk among nearly 30,000 signatories to a letter published last month urging a pause in significant projects.\",\r\n    \"split\": false\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:7000/keyword_extraction",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "7000",
+					"path": [
+						"keyword_extraction"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Dialogue",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"content-type": true
+				}
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-type",
+						"value": "application/json",
+						"type": "default"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"orig_text\": \"The UK and US have intervened in the race to develop ever more powerful artificial intelligence technology, as the British competition watchdog launched a review of the sector and the White House advised tech firms of their fundamental responsibility to develop safe products. Regulators are under mounting pressure to intervene, as the emergence of AI-powered language generators such as ChatGPT raises concerns about the potential spread of misinformation, a rise in fraud and the impact on the jobs market, with Elon Musk among nearly 30,000 signatories to a letter published last month urging a pause in significant projects.\",\r\n    \"split\": false\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:7000/keyword_extraction",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "7000",
+					"path": [
+						"keyword_extraction"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Index",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:7000",
+					"host": [
+						"localhost"
+					],
+					"port": "7000"
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Zero Shot",
+			"request": {
+				"method": "POST",
+				"header": []
+			},
+			"response": []
+		}
+	]
+}

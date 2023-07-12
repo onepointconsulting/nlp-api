@@ -3,24 +3,18 @@ use std::sync::mpsc::channel;
 use std::thread;
 
 use actix_web::web;
-use rust_bert::bart::{BartConfigResources, BartMergesResources, BartModelResources, BartVocabResources};
-use rust_bert::longt5::{LongT5ConfigResources, LongT5ModelResources, LongT5VocabResources};
-use rust_bert::pegasus::{PegasusConfigResources, PegasusModelResources, PegasusVocabResources};
-use rust_bert::pipelines::common::{ModelResource, ModelType};
 use rust_bert::pipelines::conversation::{ConversationManager, ConversationModel};
 use rust_bert::pipelines::keywords_extraction::{Keyword, KeywordExtractionConfig, KeywordExtractionModel, KeywordScorerType};
 use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsConfig, SentenceEmbeddingsModelType};
 use rust_bert::pipelines::sequence_classification::Label;
-use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
+use rust_bert::pipelines::summarization::{SummarizationModel};
 use rust_bert::pipelines::translation::{Language, TranslationModelBuilder};
 use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
-use rust_bert::prophetnet::{ProphetNetConfigResources, ProphetNetModelResources, ProphetNetVocabResources};
-use rust_bert::resources::RemoteResource;
 use rust_bert::RustBertError;
-use rust_bert::t5::{T5ConfigResources, T5ModelResources, T5VocabResources};
 use threadpool::ThreadPool;
 
 use crate::KeywordExtractionRequest;
+use crate::summarization_factory::SummarizationConfigFactory;
 
 #[derive(Debug)]
 pub(crate) enum SupportedLanguage {
@@ -160,14 +154,16 @@ impl KeywordConfigFactory {
 }
 
 pub async fn keyword_extraction(
-    request: web::Json<KeywordExtractionRequest>) ->
+    request: web::Json<KeywordExtractionRequest>, pool: web::Data<ThreadPool>) ->
 Result<Vec<Vec<Keyword>>, RustBertError> {
     let input: String = request.orig_text.clone();
     let split: bool = request.split;
     let how_many_option: Option<usize> = request.how_many;
     let ngram_range: Option<(usize, usize)> = request.ngram_range;
 
-    return thread::spawn(move || {
+    let (tx, rx) = channel();
+    const DEFAULT_HOW_MANY: usize = 5;
+    pool.execute(move || {
         let vec = handle_split(input, split);
         let splits: Vec<&str> = vec.iter().map(|s| s.as_str()).collect();
         let keyword_extraction_model = if how_many_option.is_some() && ngram_range.is_some() {
@@ -177,60 +173,30 @@ Result<Vec<Vec<Keyword>>, RustBertError> {
             KeywordConfigFactory::variable_keyword_number(how_many_option.unwrap())
         } else if ngram_range.is_some() {
             KeywordConfigFactory::variable_keyword_number_ngram(
-                5, ngram_range.unwrap())
+                DEFAULT_HOW_MANY, ngram_range.unwrap())
         } else {
             Default::default()
         };
-        let keyword_extraction_model = KeywordExtractionModel::new(keyword_extraction_model)?;
-        let output = keyword_extraction_model.predict(&splits)?;
-        Ok(output)
-    }).join().expect("Failed keyword extraction");
-}
-
-struct SummarizationConfigFactory;
-
-impl SummarizationConfigFactory {
-    fn distil_bart() -> SummarizationConfig {
-        SummarizationConfig::new(
-            ModelType::Bart,
-            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
-                BartModelResources::DISTILBART_CNN_6_6,
-            ))),
-            RemoteResource::from_pretrained(BartConfigResources::DISTILBART_CNN_6_6),
-            RemoteResource::from_pretrained(BartVocabResources::DISTILBART_CNN_6_6),
-            Some(RemoteResource::from_pretrained(BartMergesResources::DISTILBART_CNN_6_6)),
-        )
-    }
-    fn pegasus() -> SummarizationConfig {
-        SummarizationConfig::new(
-            ModelType::Pegasus,
-            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
-                PegasusModelResources::CNN_DAILYMAIL,
-            ))),
-            RemoteResource::from_pretrained(PegasusConfigResources::CNN_DAILYMAIL),
-            RemoteResource::from_pretrained(PegasusVocabResources::CNN_DAILYMAIL),
-            None)
-    }
-    fn prophetnet() -> SummarizationConfig {
-        SummarizationConfig::new(
-            ModelType::ProphetNet,
-            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
-                ProphetNetModelResources::PROPHETNET_LARGE_UNCASED,
-            ))),
-            RemoteResource::from_pretrained(ProphetNetConfigResources::PROPHETNET_LARGE_UNCASED),
-            RemoteResource::from_pretrained(ProphetNetVocabResources::PROPHETNET_LARGE_UNCASED),
-            None)
-    }
-    fn long_t5() -> SummarizationConfig {
-        SummarizationConfig::new(
-            ModelType::LongT5,
-            ModelResource::Torch(Box::new(RemoteResource::from_pretrained(
-                LongT5ModelResources::TGLOBAL_BASE_BOOK_SUMMARY,
-            ))),
-            RemoteResource::from_pretrained(LongT5ConfigResources::TGLOBAL_BASE_BOOK_SUMMARY),
-            RemoteResource::from_pretrained(LongT5VocabResources::TGLOBAL_BASE_BOOK_SUMMARY),
-            None)
-    }
+        let keyword_extraction_mode_resl =
+            KeywordExtractionModel::new(keyword_extraction_model);
+        match keyword_extraction_mode_resl {
+            Ok(keyword_extraction_model) => {
+                let output_result = keyword_extraction_model.predict(&splits);
+                match output_result {
+                    Ok(output) => {
+                        let _ = tx.send(Ok(output));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(Err(e));
+            }
+        }
+    });
+    rx.recv().unwrap()
 }
 
 pub async fn summarization(input_str: String, model_option: &Option<String>, pool: web::Data<ThreadPool>)

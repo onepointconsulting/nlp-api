@@ -1,5 +1,6 @@
 mod nlp;
 mod transport_structs;
+mod summarization_factory;
 
 use std::future::Future;
 use std::str::FromStr;
@@ -85,8 +86,8 @@ async fn zero_shot_classification_service(request: web::Json<ZeroShotRequest>) -
 }
 
 #[post("/keyword_extraction")]
-async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>) -> impl Responder {
-    let res = keyword_extraction(request);
+async fn keyword_extraction_service(request: web::Json<KeywordExtractionRequest>, pool: web::Data<ThreadPool>) -> impl Responder {
+    let res = keyword_extraction(request, pool);
     match res.await {
         Ok(vec) => {
             let keyword_res = vec.iter()
